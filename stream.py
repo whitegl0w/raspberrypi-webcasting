@@ -1,28 +1,29 @@
-from aiortc.contrib.media import MediaPlayer, MediaRelay, MediaRecorder, MediaStreamTrack
-from time import sleep
+from aiortc.contrib.media import MediaPlayer, MediaRelay, MediaRecorder
 import asyncio
 import platform
 import sys
 
+
 def get_tracks():
     video_options = {"video_size": "1280x720", "vcodec": "h264", "b:v": "1800k"}
     audio_options = {"acodec": "libmp3lame", "b:a": "128k", "ar": "44100"}
-    audio = MediaPlayer(
+    audio_track = MediaPlayer(
                         "anullsrc=channel_layout=stereo:sample_rate=44100",
                         format='lavfi',
                         options=audio_options
                     ).audio
 
     if platform.system() == "Windows":
-        video = MediaPlayer(
+        video_track = MediaPlayer(
                         "video=HP TrueVision HD Camera",
                         format="dshow",
                         options=video_options
                     ).video
     else:
-        video = MediaPlayer("/dev/video0", format="v4l2", options=video_options).video
+        video_track = MediaPlayer("/dev/video0", format="v4l2", options=video_options).video
 
-    return audio, video
+    return audio_track, video_track
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
