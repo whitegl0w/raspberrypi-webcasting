@@ -11,9 +11,9 @@ recorder: MediaRecorder
 
 async def open_socket(args):
     sock = socket.socket()
-    sock.bind(('localhost', args.port))
+    sock.bind(('', args.port))
     sock.setblocking(False)
-    sock.listen(10)
+    sock.listen(1)
     loop = asyncio.get_event_loop()
     conn, _ = await loop.sock_accept(sock)
 
