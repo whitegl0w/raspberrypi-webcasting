@@ -50,7 +50,7 @@ async def create_rtc_connection(conn):
             await recorder.stop()
             print("Recorder closed")
 
-    data = (await loop.sock_recv(conn, 4096)).decode('utf-8')
+    data = (await loop.sock_recv(conn, 8192)).decode('utf-8')
     params = json.loads(data)
 
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])

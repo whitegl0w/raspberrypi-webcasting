@@ -60,7 +60,7 @@ async def create_rtc_connection(conn):
         if pc.iceGatheringState == 'complete':
             message = json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
             await loop.sock_sendall(conn, message.encode('utf-8'))
-            params = json.loads((await loop.sock_recv(conn, 4096)).decode('utf-8'))
+            params = json.loads((await loop.sock_recv(conn, 8192)).decode('utf-8'))
             if "sdp" in params.keys():
                 answer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
                 await pc.setRemoteDescription(answer)
