@@ -9,13 +9,7 @@ from argparse import ArgumentParser
 
 
 async def get_tracks():
-    video_options = {"video_size": "1280x720", "vcodec": "h264", "b:v": "1800k"}
-    audio_options = {"acodec": "libmp3lame", "b:a": "128k", "ar": "44100"}
-    audio_track = MediaPlayer(
-                        "anullsrc=channel_layout=stereo:sample_rate=44100",
-                        format='lavfi',
-                        options=audio_options
-                    ).audio
+    video_options = {"video_size": "640x480", "framerate": "30"}
 
     if platform.system() == "Windows":
         video_track = MediaPlayer(
@@ -26,7 +20,7 @@ async def get_tracks():
     else:
         video_track = MediaPlayer("/dev/video0", format="v4l2", options=video_options).video
 
-    return audio_track, video_track
+    return video_track
 
 
 async def open_socket(args):
@@ -42,9 +36,8 @@ async def create_rtc_connection(conn):
     relay = MediaRelay()
     config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
     pc = RTCPeerConnection(config)
-    audio, video = await get_tracks()
+    video = await get_tracks()
     pc.addTrack(relay.subscribe(video))
-    pc.addTrack(audio)
     loop = asyncio.get_event_loop()
 
     offer = await pc.createOffer()
