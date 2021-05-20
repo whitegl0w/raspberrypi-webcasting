@@ -1,11 +1,12 @@
 import asyncio
 import json
 import logging
-
 import websockets
+
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from aiortc.contrib.media import MediaRecorder, MediaRelay
 from argparse import ArgumentParser
+from logging_setting import ColorHandler
 from websockets import WebSocketServerProtocol
 
 
@@ -94,20 +95,6 @@ class WebRTCServer:
         await self.pc.close()
 
 
-class CustomFilter(logging.Filter):
-    COLOR = {
-        "DEBUG": "GREEN",
-        "INFO": "GREEN",
-        "WARNING": "YELLOW",
-        "ERROR": "RED",
-        "CRITICAL": "RED",
-    }
-
-    def filter(self, record):
-        record.color = CustomFilter.COLOR[record.levelname]
-        return True
-
-
 def main():
     parser = ArgumentParser()
     parser.add_argument("-p", "--port", type=int, help='Server port (default: 443)')
@@ -129,10 +116,7 @@ def main():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(
-        format="[%(levelname)s] %(message)s",
-    )
     logger = logging.getLogger("app")
     logger.setLevel(logging.INFO)
-    logger.addFilter(CustomFilter())
+    logger.addHandler(ColorHandler())
     main()

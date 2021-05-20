@@ -7,25 +7,32 @@ import websockets
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from aiortc.contrib.media import MediaPlayer, MediaRelay
 from argparse import ArgumentParser
+from logging_setting import ColorHandler
 
 
 class WebSocketClient:
     def __init__(self, server, port):
         self.__websock = None
-        self.__message_event = None
+        self.__on_message = None
+        self.__on_connected = None
         uri = f"ws://{server}:{port}"
         asyncio.get_event_loop().create_task(self.__connect__(uri))
 
     async def __connect__(self, uri):
         async with websockets.connect(uri) as self.__websock:
             logger.info(f"Connected {self.__websock.remote_address} websockets")
+            if self.__on_connected:
+                self.__on_connected()
             async for message in self.__websock:
                 data = json.loads(message)
-                if self.__message_event:
-                    await self.__message_event(data)
+                if self.__on_message:
+                    await self.__on_message(data)
 
     def on_message(self, fn):
-        self.__message_event = fn
+        self.__on_message = fn
+
+    def on_connected(self, fn):
+        self.__on_connected = fn
 
     async def send_data(self, data: dict):
         if self.__websock:
@@ -64,6 +71,7 @@ class WebRTCClient:
                 await self.pc.close()
             logger.info(f"Connection {self.pc.connectionState}")
 
+        @self.signaling.on_connected
         async def send_offer():
             logger.debug(f"Ice Gathering State: {self.pc.iceGatheringState}")
             if self.pc.iceGatheringState == 'complete':
@@ -76,7 +84,6 @@ class WebRTCClient:
 
         offer = await self.pc.createOffer()
         await self.pc.setLocalDescription(offer)
-        await send_offer()
 
     @staticmethod
     async def __get_tracks__():
@@ -100,20 +107,6 @@ class WebRTCClient:
             await self.signaling.close()
 
 
-class CustomFilter(logging.Filter):
-    COLOR = {
-        "DEBUG": "GREEN",
-        "INFO": "GREEN",
-        "WARNING": "YELLOW",
-        "ERROR": "RED",
-        "CRITICAL": "RED",
-    }
-
-    def filter(self, record):
-        record.color = CustomFilter.COLOR[record.levelname]
-        return True
-
-
 def main():
     parser = ArgumentParser()
     parser.add_argument("host", help='Server IP address')
@@ -134,10 +127,7 @@ def main():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(
-        format="[%(levelname)s] %(message)s",
-    )
     logger = logging.getLogger("app")
     logger.setLevel(logging.INFO)
-    logger.addFilter(CustomFilter())
+    logger.addHandler(ColorHandler())
     main()
