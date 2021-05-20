@@ -1,11 +1,12 @@
 import asyncio
 import json
+import logging
 import platform
 import websockets
+
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from aiortc.contrib.media import MediaPlayer, MediaRelay
 from argparse import ArgumentParser
-from websockets import WebSocketClientProtocol
 
 
 class WebSocketClient:
@@ -51,6 +52,7 @@ class WebRTCClient:
 
         @self.signaling.on_message
         async def on_message(message):
+            logger.debug(f"{message.get('type')} received")
             if message.get("type") == "answer":
                 answer = RTCSessionDescription(sdp=message["sdp"], type=message["type"])
                 await self.pc.setRemoteDescription(answer)
@@ -59,10 +61,11 @@ class WebRTCClient:
         async def on_connectionstatechange():
             if self.pc.connectionState == "failed":
                 await self.pc.close()
-            print(f"Connection state: {self.pc.connectionState}")
+            logger.info(f"Connection {self.pc.connectionState}")
 
         async def send_offer():
             if self.pc.iceGatheringState == 'complete':
+                logger.debug("Offer sent")
                 await self.signaling.send_data(
                     {"sdp": self.pc.localDescription.sdp, "type": self.pc.localDescription.type}
                 )
@@ -95,6 +98,20 @@ class WebRTCClient:
             await self.signaling.close()
 
 
+class CustomFilter(logging.Filter):
+    COLOR = {
+        "DEBUG": "GREEN",
+        "INFO": "GREEN",
+        "WARNING": "YELLOW",
+        "ERROR": "RED",
+        "CRITICAL": "RED",
+    }
+
+    def filter(self, record):
+        record.color = CustomFilter.COLOR[record.levelname]
+        return True
+
+
 def main():
     parser = ArgumentParser()
     parser.add_argument("host", help='Server IP address')
@@ -112,4 +129,10 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        format="[%(levelname)s] %(message)s",
+    )
+    logger = logging.getLogger("app")
+    logger.setLevel(logging.INFO)
+    logger.addFilter(CustomFilter())
     main()

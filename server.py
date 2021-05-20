@@ -1,22 +1,23 @@
 import asyncio
 import json
+import logging
+
 import websockets
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from aiortc.contrib.media import MediaRecorder, MediaRelay
 from argparse import ArgumentParser
 from websockets import WebSocketServerProtocol
 
-recorder: MediaRecorder
-
 
 class WebSocketServer:
     def __init__(self, port):
         self.__websock = None
         self.__message_event = None
-        start_server = websockets.serve(self.__handler__, 'localhost', port)
+        start_server = websockets.serve(self.__handler__, '0.0.0.0', port)
         asyncio.ensure_future(start_server)
 
     async def __handler__(self, websock: WebSocketServerProtocol, _):
+        logger.info(f"Connected {websock}")
         self.__websock = websock
         try:
             async for message in websock:
@@ -50,18 +51,20 @@ class WebRTCServer:
         config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
         self.pc = RTCPeerConnection(config)
         self.signaling = WebSocketServer(port)
-        self.recorder = MediaRecorder('out.mp4')
+        self.recorder = MediaRecorder('video/out-%3d.mp4',
+                                      format="segment",
+                                      options={"segment_time": "00:00:20", "reset_timestamps": "1"})
 
         @self.signaling.on_message
         async def on_message(message):
+            logger.debug(f"{message.get('type')} received")
             if message.get("type") == "offer":
                 offer = RTCSessionDescription(sdp=message["sdp"], type=message["type"])
                 await self.pc.setRemoteDescription(offer)
-
                 answer = await self.pc.createAnswer()
                 await self.pc.setLocalDescription(answer)
-
                 answer = {"sdp": self.pc.localDescription.sdp, "type": self.pc.localDescription.type}
+                logger.debug("Answer sent")
                 await self.signaling.send_data(answer)
 
         @self.pc.on("connectionstatechange")
@@ -72,8 +75,8 @@ class WebRTCServer:
                 await self.recorder.start()
             elif self.pc.connectionState == "closed":
                 await self.recorder.stop()
-                print("Recorder closed")
-            print(f"Connection state: {self.pc.connectionState}")
+                logger.info("Recorder closed")
+            logger.info(f"Connection {self.pc.connectionState}")
 
         @self.pc.on("track")
         async def on_track(track):
@@ -81,12 +84,12 @@ class WebRTCServer:
                 self.recorder.addTrack(track)
             elif track.kind == "video":
                 self.recorder.addTrack(relay.subscribe(track))
-            print(f"Track {track.kind} added")
+            logger.info(f"Track {track.kind} added")
 
             @track.on("ended")
             async def on_ended():
                 await self.recorder.stop()
-                print("Track ended")
+                logger.info(f"Track {track.kind} ended")
 
     async def close_connection(self):
         await self.recorder.stop()
@@ -94,8 +97,21 @@ class WebRTCServer:
         await self.pc.close()
 
 
+class CustomFilter(logging.Filter):
+    COLOR = {
+        "DEBUG": "GREEN",
+        "INFO": "GREEN",
+        "WARNING": "YELLOW",
+        "ERROR": "RED",
+        "CRITICAL": "RED",
+    }
+
+    def filter(self, record):
+        record.color = CustomFilter.COLOR[record.levelname]
+        return True
+
+
 def main():
-    global recorder
     parser = ArgumentParser()
     parser.add_argument("--port", type=int, help='Server port (default: 443)')
     args = parser.parse_args()
@@ -113,4 +129,10 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        format="[%(levelname)s] %(message)s",
+    )
+    logger = logging.getLogger("app")
+    logger.setLevel(logging.INFO)
+    logger.addFilter(CustomFilter())
     main()
