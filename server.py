@@ -1,66 +1,95 @@
 import asyncio
 import json
-import socket
-
+import websockets
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from aiortc.contrib.media import MediaRecorder, MediaRelay
 from argparse import ArgumentParser
+from websockets import WebSocketServerProtocol
 
 recorder: MediaRecorder
 
 
-async def open_socket(args):
-    sock = socket.socket()
-    sock.bind(('', args.port))
-    sock.setblocking(False)
-    sock.listen(1)
-    loop = asyncio.get_event_loop()
-    conn, _ = await loop.sock_accept(sock)
+class WebSocketServer:
+    def __init__(self, port):
+        self.__websock: WebSocketServerProtocol
+        self.__message_event = None
+        start_server = websockets.serve(self.__handler__, 'localhost', port)
+        asyncio.ensure_future(start_server)
 
-    await create_rtc_connection(conn)
+    async def __handler__(self, websock: WebSocketServerProtocol, _):
+        self.__websock = websock
+        try:
+            async for message in websock:
+                data = json.loads(message)
+                if self.__message_event:
+                    await self.__message_event(data)
+        finally:
+            pass
+
+    def on_message(self, fn):
+        self.__message_event = fn
+
+    async def send_data(self, data: dict):
+        message = json.dumps(data)
+        await self.__websock.send(message)
+
+    async def close(self):
+        await self.__websock.close()
 
 
-async def create_rtc_connection(conn):
-    global recorder
-    relay = MediaRelay()
-    config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
-    pc = RTCPeerConnection(config)
-    recorder = MediaRecorder('out.mp4')
+class WebRTCServer:
+    def __init__(self):
+        self.pc = None
+        self.signaling = None
+        self.recorder = None
 
-    loop = asyncio.get_event_loop()
+    async def accept(self, port):
+        relay = MediaRelay()
+        config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
+        self.pc = RTCPeerConnection(config)
+        self.signaling = WebSocketServer(port)
+        self.recorder = MediaRecorder('out.mp4')
 
-    @pc.on("connectionstatechange")
-    async def on_connectionstatechange():
-        if pc.connectionState == "failed":
-            await pc.close()
-        if pc.connectionState == "connected":
-            await recorder.start()
-        print(f"Connection state: {pc.connectionState}")
+        @self.signaling.on_message
+        async def on_message(message):
+            if message.get("type") == "offer":
+                offer = RTCSessionDescription(sdp=message["sdp"], type=message["type"])
+                await self.pc.setRemoteDescription(offer)
 
-    @pc.on("track")
-    async def on_track(track):
-        if track.kind == "audio":
-            recorder.addTrack(track)
-        elif track.kind == "video":
-            recorder.addTrack(relay.subscribe(track))
-        print(f"Track {track.kind} added")
+                answer = await self.pc.createAnswer()
+                await self.pc.setLocalDescription(answer)
 
-        @track.on("ended")
-        async def on_ended():
-            await recorder.stop()
-            print("Recorder closed")
+                answer = {"sdp": self.pc.localDescription.sdp, "type": self.pc.localDescription.type}
+                await self.signaling.send_data(answer)
 
-    data = (await loop.sock_recv(conn, 8192)).decode('utf-8')
-    params = json.loads(data)
+        @self.pc.on("connectionstatechange")
+        async def on_connectionstatechange():
+            if self.pc.connectionState == "failed":
+                await self.pc.close()
+            elif self.pc.connectionState == "connected":
+                await self.recorder.start()
+            elif self.pc.connectionState == "closed":
+                await self.recorder.stop()
+                print("Recorder closed")
+            print(f"Connection state: {self.pc.connectionState}")
 
-    offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
-    await pc.setRemoteDescription(offer)
+        @self.pc.on("track")
+        async def on_track(track):
+            if track.kind == "audio":
+                self.recorder.addTrack(track)
+            elif track.kind == "video":
+                self.recorder.addTrack(relay.subscribe(track))
+            print(f"Track {track.kind} added")
 
-    answer = await pc.createAnswer()
-    await pc.setLocalDescription(answer)
+            @track.on("ended")
+            async def on_ended():
+                await self.recorder.stop()
+                print("Track ended")
 
-    answer = json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
-    await loop.sock_sendall(conn, answer.encode('utf-8'))
+    async def close_connection(self):
+        await self.recorder.stop()
+        await self.signaling.close()
+        await self.pc.close()
 
 
 def main():
@@ -68,20 +97,17 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("--port", type=int, help='Server port (default: 443)')
     args = parser.parse_args()
-
     if not args.port:
         args.port = 443
+    conn = WebRTCServer()
 
-    loop = asyncio.get_event_loop()
-    loop.create_task(open_socket(args))
     try:
-        loop.run_forever()
+        asyncio.get_event_loop().create_task(conn.accept(args.port))
+        asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        if recorder is MediaRecorder:
-            loop.run_until_complete(recorder.stop())
-        loop.stop()
+        asyncio.get_event_loop().run_until_complete(conn.close_connection())
 
 
 if __name__ == '__main__':

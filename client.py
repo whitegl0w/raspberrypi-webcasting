@@ -1,66 +1,96 @@
 import asyncio
 import json
 import platform
-import socket
-
+import websockets
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from aiortc.contrib.media import MediaPlayer, MediaRelay
 from argparse import ArgumentParser
+from websockets import WebSocketClientProtocol
 
 
-async def get_tracks():
-    video_options = {"video_size": "640x480", "framerate": "30"}
+class WebSocketClient:
+    def __init__(self, server, port):
+        self.__websock: WebSocketClientProtocol
+        self.__message_event = None
+        uri = f"ws://{server}:{port}"
+        asyncio.get_event_loop().create_task(self.__connect__(uri))
 
-    if platform.system() == "Windows":
-        video_track = MediaPlayer(
-                        "video=HP TrueVision HD Camera",
-                        format="dshow",
-                        options=video_options
-                    ).video
-    else:
-        video_track = MediaPlayer("/dev/video0", format="v4l2", options=video_options).video
+    async def __connect__(self, uri):
+        async with websockets.connect(uri) as self.__websock:
+            async for message in self.__websock:
+                data = json.loads(message)
+                if self.__message_event:
+                    await self.__message_event(data)
 
-    return video_track
+    def on_message(self, fn):
+        self.__message_event = fn
 
+    async def send_data(self, data: dict):
+        message = json.dumps(data)
+        await self.__websock.send(message)
 
-async def open_socket(args):
-    conn = socket.socket()
-    conn.connect((args.host, args.port))
-    conn.setblocking(False)
-
-    await create_rtc_connection(conn)
-    conn.close()
+    async def close(self):
+        await self.__websock.close()
 
 
-async def create_rtc_connection(conn):
-    relay = MediaRelay()
-    config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
-    pc = RTCPeerConnection(config)
-    video = await get_tracks()
-    pc.addTrack(relay.subscribe(video))
-    loop = asyncio.get_event_loop()
+class WebRTCClient:
+    def __init__(self):
+        self.pc = None
+        self.signaling = None
+        self.video = None
 
-    offer = await pc.createOffer()
-    await pc.setLocalDescription(offer)
+    async def connect(self, host, port):
+        relay = MediaRelay()
+        config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
+        self.pc = RTCPeerConnection(config)
+        self.signaling = WebSocketClient(host, port)
+        self.video = await self.__get_tracks__()
+        self.pc.addTrack(relay.subscribe(self.video))
 
-    @pc.on("connectionstatechange")
-    async def on_connectionstatechange():
-        if pc.connectionState == "failed":
-            await pc.close()
-        print(f"Connection state: {pc.connectionState}")
+        @self.signaling.on_message
+        async def on_message(message):
+            if message.get("type") == "answer":
+                answer = RTCSessionDescription(sdp=message["sdp"], type=message["type"])
+                await self.pc.setRemoteDescription(answer)
 
-    async def send_offer():
-        if pc.iceGatheringState == 'complete':
-            message = json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
-            await loop.sock_sendall(conn, message.encode('utf-8'))
-            params = json.loads((await loop.sock_recv(conn, 8192)).decode('utf-8'))
-            if "sdp" in params.keys():
-                answer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
-                await pc.setRemoteDescription(answer)
+        @self.pc.on("connectionstatechange")
+        async def on_connectionstatechange():
+            if self.pc.connectionState == "failed":
+                await self.pc.close()
+            print(f"Connection state: {self.pc.connectionState}")
+
+        async def send_offer():
+            if self.pc.iceGatheringState == 'complete':
+                await self.signaling.send_data(
+                    {"sdp": self.pc.localDescription.sdp, "type": self.pc.localDescription.type}
+                )
+            else:
+                self.pc.once("icegatheringstatechange", send_offer)
+
+        offer = await self.pc.createOffer()
+        await self.pc.setLocalDescription(offer)
+        await send_offer()
+
+    @staticmethod
+    async def __get_tracks__():
+        video_options = {"video_size": "640x480", "framerate": "30"}
+
+        if platform.system() == "Windows":
+            video_track = MediaPlayer(
+                "video=HP TrueVision HD Camera",
+                format="dshow",
+                options=video_options
+            ).video
         else:
-            pc.once("icegatheringstatechange", send_offer)
+            video_track = MediaPlayer("/dev/video0", format="v4l2", options=video_options).video
 
-    await send_offer()
+        return video_track
+
+    async def close_connection(self):
+        if self.pc and self.video and self.signaling:
+            await self.pc.close()
+            self.video.stop()
+            await self.signaling.close()
 
 
 def main():
@@ -68,15 +98,15 @@ def main():
     parser.add_argument("host", help='Server IP address')
     parser.add_argument("port", type=int, help='Server port')
     args = parser.parse_args()
+    conn = WebRTCClient()
 
-    loop = asyncio.get_event_loop()
-    loop.create_task(open_socket(args))
     try:
-        loop.run_forever()
+        asyncio.get_event_loop().create_task(conn.connect(args.host, args.port))
+        asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        loop.stop()
+        asyncio.get_event_loop().run_until_complete(conn.close_connection())
 
 
 if __name__ == '__main__':
