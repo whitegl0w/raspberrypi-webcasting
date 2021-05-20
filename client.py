@@ -22,7 +22,7 @@ class WebSocketClient:
         async with websockets.connect(uri) as self.__websock:
             logger.info(f"Connected {self.__websock.remote_address} websockets")
             if self.__on_connected:
-                self.__on_connected()
+                await self.__on_connected()
             async for message in self.__websock:
                 data = json.loads(message)
                 if self.__on_message:
