@@ -17,15 +17,12 @@ class WebSocketServer:
         asyncio.ensure_future(start_server)
 
     async def __handler__(self, websock: WebSocketServerProtocol, _):
-        logger.info(f"Connected {websock}")
+        logger.info(f"Connected {websock.remote_address} websockets")
         self.__websock = websock
-        try:
-            async for message in websock:
-                data = json.loads(message)
-                if self.__message_event:
-                    await self.__message_event(data)
-        finally:
-            pass
+        async for message in websock:
+            data = json.loads(message)
+            if self.__message_event:
+                await self.__message_event(data)
 
     def on_message(self, fn):
         self.__message_event = fn
@@ -113,10 +110,13 @@ class CustomFilter(logging.Filter):
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument("--port", type=int, help='Server port (default: 443)')
+    parser.add_argument("-p", "--port", type=int, help='Server port (default: 443)')
+    parser.add_argument("-v", "--verbose", action="count", help='Enable debug log')
     args = parser.parse_args()
     if not args.port:
         args.port = 443
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
     conn = WebRTCServer()
 
     try:

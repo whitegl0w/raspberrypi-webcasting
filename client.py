@@ -18,6 +18,7 @@ class WebSocketClient:
 
     async def __connect__(self, uri):
         async with websockets.connect(uri) as self.__websock:
+            logger.info(f"Connected {self.__websock.remote_address} websockets")
             async for message in self.__websock:
                 data = json.loads(message)
                 if self.__message_event:
@@ -64,6 +65,7 @@ class WebRTCClient:
             logger.info(f"Connection {self.pc.connectionState}")
 
         async def send_offer():
+            logger.debug(f"Ice Gathering State: {self.pc.iceGatheringState}")
             if self.pc.iceGatheringState == 'complete':
                 logger.debug("Offer sent")
                 await self.signaling.send_data(
@@ -116,8 +118,11 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("host", help='Server IP address')
     parser.add_argument("port", type=int, help='Server port')
+    parser.add_argument("-v", "--verbose", action="count", help='Enable debug log')
     args = parser.parse_args()
     conn = WebRTCClient()
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
 
     try:
         asyncio.get_event_loop().create_task(conn.connect(args.host, args.port))
