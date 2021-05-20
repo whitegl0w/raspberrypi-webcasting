@@ -76,7 +76,7 @@ class WebRTCServer:
             elif self.pc.connectionState == "closed":
                 await self.recorder.stop()
                 logger.info("Recorder closed")
-            logger.info(f"Connection {self.pc.connectionState}")
+            logger.info(f"Connection state: {self.pc.connectionState}")
 
         @self.pc.on("track")
         async def on_track(track):
@@ -92,6 +92,7 @@ class WebRTCServer:
                 logger.info(f"Track {track.kind} ended")
 
     async def close_connection(self):
+        await self.signaling.send_data({"type": "finish"})
         await self.recorder.stop()
         await self.signaling.close()
         await self.pc.close()

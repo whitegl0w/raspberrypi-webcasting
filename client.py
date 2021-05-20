@@ -54,9 +54,28 @@ class WebRTCClient:
         relay = MediaRelay()
         config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
         self.pc = RTCPeerConnection(config)
-        self.signaling = WebSocketClient(host, port)
+
         self.video = await self.__get_tracks__()
         self.pc.addTrack(relay.subscribe(self.video))
+
+        offer = await self.pc.createOffer()
+        await self.pc.setLocalDescription(offer)
+
+        self.signaling = WebSocketClient(host, port)
+
+        async def send_offer():
+            logger.debug(f"Ice Gathering State: {self.pc.iceGatheringState}")
+            if self.pc.iceGatheringState == 'complete':
+                logger.debug("Offer sent")
+                await self.signaling.send_data(
+                    {"sdp": self.pc.localDescription.sdp, "type": self.pc.localDescription.type}
+                )
+            else:
+                self.pc.once("icegatheringstatechange", send_offer)
+
+        @self.signaling.on_connected
+        async def on_connected():
+            await send_offer()
 
         @self.signaling.on_message
         async def on_message(message):
@@ -71,23 +90,7 @@ class WebRTCClient:
         async def on_connectionstatechange():
             if self.pc.connectionState == "failed":
                 await self.pc.close()
-            logger.info(f"Connection {self.pc.connectionState}")
-
-        async def send_offer():
-            logger.debug(f"Ice Gathering State: {self.pc.iceGatheringState}")
-            if self.pc.iceGatheringState == 'complete':
-                offer = await self.pc.createOffer()
-                await self.pc.setLocalDescription(offer)
-                logger.debug("Offer sent")
-                await self.signaling.send_data(
-                    {"sdp": self.pc.localDescription.sdp, "type": self.pc.localDescription.type}
-                )
-            else:
-                self.pc.once("icegatheringstatechange", send_offer)
-
-        @self.signaling.on_connected
-        async def on_connected():
-            await send_offer()
+            logger.info(f"Connection state: {self.pc.connectionState}")
 
     @staticmethod
     async def __get_tracks__():
@@ -106,6 +109,7 @@ class WebRTCClient:
 
     async def close_connection(self):
         if self.pc and self.video and self.signaling:
+            await self.signaling.send_data({"type": "finish"})
             await self.pc.close()
             self.video.stop()
             await self.signaling.close()
