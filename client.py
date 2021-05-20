@@ -71,7 +71,6 @@ class WebRTCClient:
                 await self.pc.close()
             logger.info(f"Connection {self.pc.connectionState}")
 
-        @self.signaling.on_connected
         async def send_offer():
             logger.debug(f"Ice Gathering State: {self.pc.iceGatheringState}")
             if self.pc.iceGatheringState == 'complete':
@@ -81,6 +80,10 @@ class WebRTCClient:
                 )
             else:
                 self.pc.once("icegatheringstatechange", send_offer)
+
+        @self.signaling.on_connected
+        async def on_connected():
+            await send_offer()
 
         offer = await self.pc.createOffer()
         await self.pc.setLocalDescription(offer)
