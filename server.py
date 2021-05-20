@@ -64,6 +64,8 @@ class WebRTCServer:
                 answer = {"sdp": self.pc.localDescription.sdp, "type": self.pc.localDescription.type}
                 logger.debug("Answer sent")
                 await self.signaling.send_data(answer)
+            elif message.get("type") == "finish":
+                await self.close_connection()
 
         @self.pc.on("connectionstatechange")
         async def on_connectionstatechange():

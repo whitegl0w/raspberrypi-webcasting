@@ -64,6 +64,8 @@ class WebRTCClient:
             if message.get("type") == "answer":
                 answer = RTCSessionDescription(sdp=message["sdp"], type=message["type"])
                 await self.pc.setRemoteDescription(answer)
+            elif message.get("type") == "finish":
+                await self.close_connection()
 
         @self.pc.on("connectionstatechange")
         async def on_connectionstatechange():
@@ -74,6 +76,8 @@ class WebRTCClient:
         async def send_offer():
             logger.debug(f"Ice Gathering State: {self.pc.iceGatheringState}")
             if self.pc.iceGatheringState == 'complete':
+                offer = await self.pc.createOffer()
+                await self.pc.setLocalDescription(offer)
                 logger.debug("Offer sent")
                 await self.signaling.send_data(
                     {"sdp": self.pc.localDescription.sdp, "type": self.pc.localDescription.type}
@@ -84,9 +88,6 @@ class WebRTCClient:
         @self.signaling.on_connected
         async def on_connected():
             await send_offer()
-
-        offer = await self.pc.createOffer()
-        await self.pc.setLocalDescription(offer)
 
     @staticmethod
     async def __get_tracks__():
