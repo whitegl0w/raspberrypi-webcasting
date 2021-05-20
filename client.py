@@ -10,7 +10,7 @@ from websockets import WebSocketClientProtocol
 
 class WebSocketClient:
     def __init__(self, server, port):
-        self.__websock: WebSocketClientProtocol
+        self.__websock = None
         self.__message_event = None
         uri = f"ws://{server}:{port}"
         asyncio.get_event_loop().create_task(self.__connect__(uri))
@@ -26,11 +26,13 @@ class WebSocketClient:
         self.__message_event = fn
 
     async def send_data(self, data: dict):
-        message = json.dumps(data)
-        await self.__websock.send(message)
+        if self.__websock:
+            message = json.dumps(data)
+            await self.__websock.send(message)
 
     async def close(self):
-        await self.__websock.close()
+        if self.__websock:
+            await self.__websock.close()
 
 
 class WebRTCClient:

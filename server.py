@@ -11,7 +11,7 @@ recorder: MediaRecorder
 
 class WebSocketServer:
     def __init__(self, port):
-        self.__websock: WebSocketServerProtocol
+        self.__websock = None
         self.__message_event = None
         start_server = websockets.serve(self.__handler__, 'localhost', port)
         asyncio.ensure_future(start_server)
@@ -30,11 +30,13 @@ class WebSocketServer:
         self.__message_event = fn
 
     async def send_data(self, data: dict):
-        message = json.dumps(data)
-        await self.__websock.send(message)
+        if self.__websock:
+            message = json.dumps(data)
+            await self.__websock.send(message)
 
     async def close(self):
-        await self.__websock.close()
+        if self.__websock:
+            await self.__websock.close()
 
 
 class WebRTCServer:
