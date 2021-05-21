@@ -83,8 +83,6 @@ class WebRTCClient:
             if message.get("type") == "answer":
                 answer = RTCSessionDescription(sdp=message["sdp"], type=message["type"])
                 await self.pc.setRemoteDescription(answer)
-            elif message.get("type") == "finish":
-                await self.close_connection()
 
         @self.pc.on("connectionstatechange")
         async def on_connectionstatechange():
@@ -109,7 +107,6 @@ class WebRTCClient:
 
     async def close_connection(self):
         if self.pc and self.video and self.signaling:
-            await self.signaling.send_data({"type": "finish"})
             await self.pc.close()
             self.video.stop()
             await self.signaling.close()
