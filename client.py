@@ -1,7 +1,9 @@
 import asyncio
+import configparser
 import json
 import logging
 import platform
+import sys
 import websockets
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
@@ -112,18 +114,63 @@ class WebRTCClient:
             await self.signaling.close()
 
 
+def create_client_config():
+    try:
+        def print_g(text, **args):
+            print(f"\x1b[32m{text}\x1b[0m", **args)
+
+        def print_b(text, **args):
+            print(f"\x1b[34m{text}\x1b[0m", **args)
+
+        config = configparser.ConfigParser()
+        print_g("Client configuration tool")
+        print_b("Enter default websockets server: ", end="")
+        server = input()
+        print_b("Enter default websockets port: ", end="")
+        port = input()
+        config["CONNECTION"] = {"Server": server, "Port": port}
+        with open('client.ini', 'w', encoding="utf-8") as configfile:
+            config.write(configfile)
+        print_g("Config client.ini created\n")
+    except KeyboardInterrupt:
+        pass
+
+
 def main():
+    # Парсинг аргументов
     parser = ArgumentParser()
-    parser.add_argument("host", help='Server IP address')
-    parser.add_argument("port", type=int, help='Server port')
+    parser.add_argument("-s", "--server", help='Server IP address')
+    parser.add_argument("-p", "--port", type=int, help='Server port')
     parser.add_argument("-v", "--verbose", action="count", help='Enable debug log')
+    parser.add_argument("-c", "--configuration", action="count", help="Create config file")
     args = parser.parse_args()
-    conn = WebRTCClient()
-    if args.verbose:
+    # Режим создания конфигурации
+    if args.configuration:
+        create_client_config()
+        sys.exit(0)
+    # Получение конфига
+    config = configparser.ConfigParser()
+    config.read('client.ini')
+    # Настройка параметров
+    if not args.server:
+        if not config.has_option("CONNECTION", "Server"):
+            logger.error("Server not specified: use -s parameters or create a configuration "
+                         "file with the command: client --configuration")
+            sys.exit(1)
+        args.server = config.get("CONNECTION", "Server")
+    if not args.port:
+        if not config.has_option("CONNECTION", "Port"):
+            logger.error("Port not specified: use -p parameters or create a configuration "
+                         "file with the command: client --configuration")
+            sys.exit(1)
+        args.port = config.get("CONNECTION", "Port")
+    if args.verbose or config.has_option("LOG", "Debug"):
         logger.setLevel(logging.DEBUG)
 
+    # Создание подключения
+    conn = WebRTCClient()
     try:
-        asyncio.get_event_loop().create_task(conn.connect(args.host, args.port))
+        asyncio.get_event_loop().create_task(conn.connect(args.server, args.port))
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         pass

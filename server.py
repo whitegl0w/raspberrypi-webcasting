@@ -1,6 +1,9 @@
 import asyncio
+import configparser
 import json
 import logging
+import sys
+
 import websockets
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
@@ -95,17 +98,54 @@ class WebRTCServer:
         await self.pc.close()
 
 
+def create_server_config():
+    try:
+        def print_g(text, **args):
+            print(f"\x1b[32m{text}\x1b[0m", **args)
+
+        def print_b(text, **args):
+            print(f"\x1b[34m{text}\x1b[0m", **args)
+
+        config = configparser.ConfigParser()
+        print_g("Server configuration tool")
+        print_b("Enter default websockets port: ", end="")
+        port = input()
+        print_b("Enter the duration of one fragment of the video file (hh:mm:ss): ", end="")
+        segment = input()
+        config["CONNECTION"] = {"Port": port}
+        config["RECORDER"] = {"Segment_time": segment}
+        with open('server.ini', 'w', encoding="utf-8") as configfile:
+            config.write(configfile)
+        print_g("Config server.ini created\n")
+    except KeyboardInterrupt:
+        pass
+
+
 def main():
+    # Парсинг аргументов
     parser = ArgumentParser()
     parser.add_argument("-p", "--port", type=int, help='Server port (default: 443)')
     parser.add_argument("-v", "--verbose", action="count", help='Enable debug log')
+    parser.add_argument("-s", "--segment", help="Set the duration of one fragment of the video file")
+    parser.add_argument("-c", "--configuration", action="count", help="Create config file")
     args = parser.parse_args()
+    # Режим создания конфигурации
+    if args.configuration:
+        create_server_config()
+        sys.exit(0)
+    # Получение конфига
+    config = configparser.ConfigParser()
+    config.read('server.ini')
+    # Настройка параметров
     if not args.port:
-        args.port = 443
-    if args.verbose:
+        args.port = config.get("CONNECTION", "Port", fallback="443")
+    if not args.segment:
+        args.segment = config.get("CONNECTION", "Segment_time", fallback="00:30:00")
+    if args.verbose or config.has_option("LOG", "Debug"):
         logger.setLevel(logging.DEBUG)
-    conn = WebRTCServer()
 
+    # Создание подключения
+    conn = WebRTCServer()
     try:
         asyncio.get_event_loop().create_task(conn.accept(args.port))
         asyncio.get_event_loop().run_forever()
@@ -116,6 +156,7 @@ def main():
 
 
 if __name__ == '__main__':
+    # Настройка логов
     logger = logging.getLogger("app")
     logger.setLevel(logging.INFO)
     logger.addHandler(ColorHandler())

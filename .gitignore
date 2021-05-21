@@ -4,3 +4,4 @@ test.py
 server.crt
 server.key
 *.mp4
+*.ini
