@@ -12,7 +12,7 @@ class ColorHandler(logging.StreamHandler):
 
     def __init__(self):
         super().__init__()
-        self.setFormatter(logging.Formatter(fmt="%(levelname)s: %(message)s"))
+        self.setFormatter(logging.Formatter(fmt="%(levelname)s [%(name)s]: %(message)s"))
 
     def emit(self, record):
         record.levelname = ColorHandler.COLOR[record.levelname] + record.levelname + '\x1b[0m'

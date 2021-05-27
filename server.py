@@ -2,6 +2,7 @@ import asyncio
 import configparser
 import json
 import logging
+import ssl
 import sys
 import websockets
 
@@ -11,6 +12,7 @@ from argparse import ArgumentParser
 from av import VideoFrame
 from logging_setting import ColorHandler
 from websockets import WebSocketServerProtocol
+from webserver import WebServer
 
 
 class MyMediaRecorder(MediaRecorder):
@@ -93,9 +95,9 @@ class WebRTCServer:
         self.pc = None
         self.signaling = None
         self.recorder = None
+        self.__video = None
 
     async def accept(self, port, segment_time):
-        relay = MediaRelay()
         config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
         self.pc = RTCPeerConnection(config)
         self.signaling = WebSocketServer(port)
@@ -105,8 +107,8 @@ class WebRTCServer:
             "strftime": "1",
         }
         self.recorder = MediaRecorder('video/%Y-%m-%d_%H-%M-%S.mkv',
-                                        format="segment",
-                                        options=recorder_options)
+                                      format="segment",
+                                      options=recorder_options)
 
         @self.signaling.on_message
         async def on_message(message):
@@ -136,7 +138,8 @@ class WebRTCServer:
             if track.kind == "audio":
                 self.recorder.addTrack(track)
             elif track.kind == "video":
-                self.recorder.addTrack(FixedDtsTrack(relay.subscribe(track)))
+                self.__video = track
+                self.recorder.addTrack(FixedDtsTrack(MediaRelay().subscribe(track)))
             logger.info(f"Track {track.kind} added")
 
             @track.on("ended")
@@ -148,6 +151,12 @@ class WebRTCServer:
         await self.recorder.stop()
         await self.signaling.close()
         await self.pc.close()
+
+    async def video_track(self):
+        if self.__video:
+            return MediaRelay().subscribe(self.__video)
+        else:
+            return None
 
 
 def create_server_config():
@@ -180,6 +189,8 @@ def main():
     parser.add_argument("-v", "--verbose", action="count", help='Enable debug log')
     parser.add_argument("-s", "--segment", help="Set the duration of one fragment of the video file")
     parser.add_argument("-c", "--configuration", action="count", help="Create config file")
+    parser.add_argument("--cert-file", help="SSL certificate file (for HTTPS)")
+    parser.add_argument("--key-file", help="SSL key file (for HTTPS)")
     args = parser.parse_args()
     # Режим создания конфигурации
     if args.configuration:
@@ -196,10 +207,19 @@ def main():
     if args.verbose or config.has_option("LOG", "Debug"):
         logger.setLevel(logging.DEBUG)
     logger.debug(f"Parameters: port={args.port}, segment={args.segment}")
+    # Получение сертификата
+    if args.cert_file:
+        ssl_context = ssl.SSLContext()
+        ssl_context.load_cert_chain(args.cert_file, args.key_file)
+    else:
+        ssl_context = None
 
-    # Создание подключения
+    # Создание WebRTC и Web серверов
     conn = WebRTCServer()
+    web_server = WebServer(conn.video_track, ssl_context)
+    # запуск
     try:
+        asyncio.get_event_loop().create_task(web_server.start_webserver())
         asyncio.get_event_loop().create_task(conn.accept(args.port, args.segment))
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:

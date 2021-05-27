@@ -3,6 +3,7 @@ import configparser
 import json
 import logging
 import platform
+import ssl
 import sys
 import websockets
 
@@ -10,6 +11,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, R
 from aiortc.contrib.media import MediaPlayer, MediaRelay
 from argparse import ArgumentParser
 from logging_setting import ColorHandler
+from webserver import WebServer
 
 
 class WebSocketClient:
@@ -18,9 +20,9 @@ class WebSocketClient:
         self.__on_message = None
         self.__on_connected = None
         uri = f"ws://{server}:{port}"
-        asyncio.get_event_loop().create_task(self.__connect__(uri))
+        asyncio.get_event_loop().create_task(self.__connect(uri))
 
-    async def __connect__(self, uri):
+    async def __connect(self, uri):
         async with websockets.connect(uri) as self.__websock:
             logger.info(f"Connected {self.__websock.remote_address} websockets")
             if self.__on_connected:
@@ -50,15 +52,15 @@ class WebRTCClient:
     def __init__(self):
         self.pc = None
         self.signaling = None
-        self.video = None
+        self.__video = None
 
     async def connect(self, host, port):
-        relay = MediaRelay()
         config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
         self.pc = RTCPeerConnection(config)
 
-        self.video = await self.__get_tracks__()
-        self.pc.addTrack(relay.subscribe(self.video))
+        if not self.__video:
+            self.__video = await self.__get_tracks()
+        self.pc.addTrack(MediaRelay().subscribe(self.__video))
 
         offer = await self.pc.createOffer()
         await self.pc.setLocalDescription(offer)
@@ -93,7 +95,7 @@ class WebRTCClient:
             logger.info(f"Connection state: {self.pc.connectionState}")
 
     @staticmethod
-    async def __get_tracks__():
+    async def __get_tracks():
         video_options = {"video_size": "640x480", "framerate": "30", "vcodec": "hevc"}
 
         if platform.system() == "Windows":
@@ -108,10 +110,15 @@ class WebRTCClient:
         return video_track
 
     async def close_connection(self):
-        if self.pc and self.video and self.signaling:
-            self.video.stop()
+        if self.pc and self.__video and self.signaling:
+            self.__video.stop()
             await self.pc.close()
             await self.signaling.close()
+
+    async def video_track(self):
+        if not self.__video:
+            self.__video = await self.__get_tracks()
+        return MediaRelay().subscribe(self.__video)
 
 
 def create_client_config():
@@ -168,9 +175,19 @@ def main():
         logger.setLevel(logging.DEBUG)
     logger.debug(f"Parameters: port={args.port}, server={args.server}")
 
-    # Создание подключения
+    # Получение сертификата
+    if args.cert_file:
+        ssl_context = ssl.SSLContext()
+        ssl_context.load_cert_chain(args.cert_file, args.key_file)
+    else:
+        ssl_context = None
+
+    # Создание веб-сервера
     conn = WebRTCClient()
+    web_server = WebServer(conn.video_track, ssl_context)
+    # запуск
     try:
+        asyncio.get_event_loop().create_task(web_server.start_webserver())
         asyncio.get_event_loop().create_task(conn.connect(args.server, args.port))
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
