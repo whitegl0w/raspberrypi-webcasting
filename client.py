@@ -94,7 +94,7 @@ class WebRTCClient:
 
     @staticmethod
     async def __get_tracks__():
-        video_options = {"video_size": "640x480", "framerate": "30"}
+        video_options = {"video_size": "640x480", "framerate": "30", "vcodec": "hevc"}
 
         if platform.system() == "Windows":
             video_track = MediaPlayer(
@@ -109,8 +109,8 @@ class WebRTCClient:
 
     async def close_connection(self):
         if self.pc and self.video and self.signaling:
-            await self.pc.close()
             self.video.stop()
+            await self.pc.close()
             await self.signaling.close()
 
 
@@ -166,6 +166,7 @@ def main():
         args.port = config.get("CONNECTION", "Port")
     if args.verbose or config.has_option("LOG", "Debug"):
         logger.setLevel(logging.DEBUG)
+    logger.debug(f"Parameters: port={args.port}, server={args.server}")
 
     # Создание подключения
     conn = WebRTCClient()
