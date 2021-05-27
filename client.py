@@ -150,6 +150,8 @@ def main():
     parser.add_argument("-p", "--port", type=int, help='Server port')
     parser.add_argument("-v", "--verbose", action="count", help='Enable debug log')
     parser.add_argument("-c", "--configuration", action="count", help="Create config file")
+    parser.add_argument("--cert-file", help="SSL certificate file (for HTTPS)")
+    parser.add_argument("--key-file", help="SSL key file (for HTTPS)")
     args = parser.parse_args()
     # Режим создания конфигурации
     if args.configuration:
