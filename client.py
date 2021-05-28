@@ -14,6 +14,7 @@ from logging_setting import ColorHandler
 from webserver import WebServer
 
 
+# Класс для создания сигнального канала
 class WebSocketClient:
     def __init__(self, server, port):
         self.__websock = None
@@ -48,6 +49,7 @@ class WebSocketClient:
             await self.__websock.close()
 
 
+# Класс для создания webRTC подключения
 class WebRTCClient:
     def __init__(self):
         self.pc = None
@@ -121,6 +123,7 @@ class WebRTCClient:
         return MediaRelay().subscribe(self.__video)
 
 
+# режим создания файла концфигурации server.ini
 def create_client_config():
     try:
         def print_g(text, **args):
@@ -187,15 +190,18 @@ def main():
     # Создание веб-сервера
     conn = WebRTCClient()
     web_server = WebServer(conn.video_track, ssl_context)
-    # запуск
+
     try:
+        # запуск всех задач
         asyncio.get_event_loop().create_task(web_server.start_webserver())
         asyncio.get_event_loop().create_task(conn.connect(args.server, args.port))
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        asyncio.get_event_loop().run_until_complete(conn.close_connection())
+        # закрытие всех соединений
+        task = asyncio.gather(conn.close_connection(), web_server.stop_webserver())
+        asyncio.get_event_loop().run_until_complete(task)
 
 
 if __name__ == '__main__':

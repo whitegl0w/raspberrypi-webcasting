@@ -9,20 +9,22 @@ from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from logging_setting import ColorHandler
 
+# настройка логов
 logger = logging.getLogger("webapp")
 logger.setLevel(logging.INFO)
 logger.addHandler(ColorHandler())
 
 
+# класс для создания web-сервера
 class WebServer:
     @staticmethod
     @aiohttp_jinja2.template("index.html")
-    async def index(_):
+    async def _index(_):
         directory = os.path.join(os.path.dirname(__file__), "video")
 
         def get_size(file):
             size = os.path.getsize(os.path.join(directory, file))
-            return f"{size // (2 ** 13)} Мб"
+            return f"{size / (2 ** 20):.2f} Мб"
 
         files = [{
             "filename": f,
@@ -32,12 +34,14 @@ class WebServer:
         return {"videos": files}
 
     @staticmethod
-    async def javascript(_):
+    async def _javascript(_):
         content = open(os.path.join(os.path.dirname(__file__), "client.js"), "r").read()
         return web.Response(content_type="application/javascript", text=content)
 
+    # обработка get запросов вида /download/name
+    # name - имя файла из папки video для загрузки
     @staticmethod
-    async def download_file(request):
+    async def _download_file(request):
         filename = request.match_info['name']
         fullname = os.path.join(os.path.dirname(__file__), "video", filename)
         if os.path.exists(fullname):
@@ -49,8 +53,10 @@ class WebServer:
         self.ssl_context = ssl_context
         self.pcs = set()
         self.get_video_fun = get_video_fun
+        self.server = None
 
-    async def offer(self, request):
+    # обработка запроса offer и отправка answer
+    async def _offer(self, request):
         params = await request.json()
         offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
@@ -63,15 +69,16 @@ class WebServer:
         @pc.on("connectionstatechange")
         async def on_connectionstatechange():
             logger.info(f"Connection state: {pc.connectionState}")
+            # закрытие подлючения
             if pc.connectionState == "failed":
                 await pc.close()
                 track.stop()
                 self.pcs.discard(pc)
 
-        # handle offer
         await pc.setRemoteDescription(offer)
-        pc.addTrack(track)
-        # send answer
+        if track:
+            pc.addTrack(track)
+        # отправить answer
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
 
@@ -82,22 +89,25 @@ class WebServer:
             )
         )
 
-    async def on_shutdown(self, _):
-        # close peer connections
+    async def _on_shutdown(self, _):
+        # закрыть все подключения
         task = [pc.close() for pc in self.pcs]
         await asyncio.gather(*task)
         self.pcs.clear()
 
     async def start_webserver(self):
         app = web.Application()
-        app.on_shutdown.append(self.on_shutdown)
-        app.router.add_get("/", WebServer.index)
-        app.router.add_get("/client.js", WebServer.javascript)
-        app.router.add_post("/offer", self.offer)
-        app.router.add_get("/download/{name}", WebServer.download_file)
+        app.on_shutdown.append(self._on_shutdown)
+        app.router.add_get("/", WebServer._index)
+        app.router.add_get("/client.js", WebServer._javascript)
+        app.router.add_post("/offer", self._offer)
+        app.router.add_get("/download/{name}", WebServer._download_file)
         aiohttp_jinja2.setup(app, loader=jinja2.FileSystemLoader(os.path.dirname(__file__)))
 
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, host="0.0.0.0", port=8080, ssl_context=self.ssl_context)
-        await site.start()
+        self.server = web.TCPSite(runner, host="0.0.0.0", port=8080, ssl_context=self.ssl_context)
+        await self.server.start()
+
+    async def stop_webserver(self):
+        await self.server.stop()

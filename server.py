@@ -7,69 +7,39 @@ import sys
 import websockets
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer, MediaStreamTrack
-from aiortc.contrib.media import MediaRecorder, MediaRelay, MediaRecorderContext
+from aiortc.contrib.media import MediaRecorder, MediaRelay
 from argparse import ArgumentParser
-from av import VideoFrame
 from logging_setting import ColorHandler
 from websockets import WebSocketServerProtocol
 from webserver import WebServer
 
 
-class MyMediaRecorder(MediaRecorder):
-    def addTrack(self, track):
-        if track.kind == "audio":
-            if self._MediaRecorder__container.format.name in ("wav", "alsa"):
-                codec_name = "pcm_s16le"
-            elif self._MediaRecorder__container.format.name == "mp3":
-                codec_name = "mp3"
-            else:
-                codec_name = "aac"
-            stream = self._MediaRecorder__container.add_stream(codec_name)
-        else:
-            if self._MediaRecorder__container.format.name == "image2":
-                stream = self._MediaRecorder__container.add_stream("png", rate=30)
-                stream.pix_fmt = "rgb24"
-            else:
-                stream = self._MediaRecorder__container.add_stream("QSV", rate=30)
-                stream.pix_fmt = "yuv420p"
-        self._MediaRecorder__tracks[track] = MediaRecorderContext(stream)
-
-
-class FixedDtsTrack(MediaStreamTrack):
+# исправление pts-presentation timestamp в видео на равномерный,
+# чтобы избежить проблем при кодировании
+class FixedPtsTrack(MediaStreamTrack):
     kind = "video"
 
     def __init__(self, track):
         super().__init__()
         self.track = track
-        self.prev_pts = None
+        self.pts = 0
 
     async def recv(self):
         frame = await self.track.recv()
-        if self.prev_pts:
-            logger.debug(f"P: {self.prev_pts} C: {frame.pts} D: {frame.pts - self.prev_pts} TB: {frame.time_base}")
-            # while frame.pts - self.prev_pts >= 100000:
-            #     logger.error(f"Frame {frame.pts} skipped")
-            #     frame = await self.track.recv()
-        self.prev_pts = frame.pts
-        frame.pts = None
-        frame.time_base = None
+        frame.pts = self.pts
+        self.pts += 6122
         return frame
 
-        # frame.pts = None
-        # frame.time_base = None
-        # img = frame.to_ndarray(format="bgr24")
-        # new_frame = VideoFrame.from_ndarray(img, format="bgr24")
-        # return new_frame
 
-
+# Класс для создания сигнального канала
 class WebSocketServer:
     def __init__(self, port):
         self.__websock = None
         self.__message_event = None
-        start_server = websockets.serve(self.__handler__, '0.0.0.0', port)
+        start_server = websockets.serve(self.__handler, '0.0.0.0', port)
         asyncio.ensure_future(start_server)
 
-    async def __handler__(self, websock: WebSocketServerProtocol, _):
+    async def __handler(self, websock: WebSocketServerProtocol, _):
         logger.info(f"Connected {websock.remote_address} websockets")
         self.__websock = websock
         async for message in websock:
@@ -90,6 +60,7 @@ class WebSocketServer:
             await self.__websock.close()
 
 
+# Класс для создания webRTC подключения
 class WebRTCServer:
     def __init__(self):
         self.pc = None
@@ -139,7 +110,7 @@ class WebRTCServer:
                 self.recorder.addTrack(track)
             elif track.kind == "video":
                 self.__video = track
-                self.recorder.addTrack(FixedDtsTrack(MediaRelay().subscribe(track)))
+                self.recorder.addTrack(FixedPtsTrack(MediaRelay().subscribe(track)))
             logger.info(f"Track {track.kind} added")
 
             @track.on("ended")
@@ -159,6 +130,7 @@ class WebRTCServer:
             return None
 
 
+# режим создания файла концфигурации server.ini
 def create_server_config():
     try:
         def print_g(text, **args):
@@ -192,7 +164,7 @@ def main():
     parser.add_argument("--cert-file", help="SSL certificate file (for HTTPS)")
     parser.add_argument("--key-file", help="SSL key file (for HTTPS)")
     args = parser.parse_args()
-    # Режим создания конфигурации
+    # Вход в режим создания конфигурации
     if args.configuration:
         create_server_config()
         sys.exit(0)
@@ -214,18 +186,21 @@ def main():
     else:
         ssl_context = None
 
-    # Создание WebRTC и Web серверов
+    # Создание WebRTC и Web сервера
     conn = WebRTCServer()
     web_server = WebServer(conn.video_track, ssl_context)
-    # запуск
+
     try:
+        # запуск всех задач
         asyncio.get_event_loop().create_task(web_server.start_webserver())
         asyncio.get_event_loop().create_task(conn.accept(args.port, args.segment))
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        asyncio.get_event_loop().run_until_complete(conn.close_connection())
+        # закрытие всех соединений
+        task = asyncio.gather(conn.close_connection(), web_server.stop_webserver())
+        asyncio.get_event_loop().run_until_complete(task)
 
 
 if __name__ == '__main__':
