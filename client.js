@@ -1,10 +1,6 @@
 // peer connection
 var pc = null;
 
-var iceConnectionLog = document.getElementById('ice-connection-state'),
-    iceGatheringLog = document.getElementById('ice-gathering-state'),
-    signalingLog = document.getElementById('signaling-state');
-
 function createPeerConnection() {
     var config = {
         sdpSemantics: 'unified-plan'
@@ -16,19 +12,24 @@ function createPeerConnection() {
 
     // register some listeners to help debugging
     pc.addEventListener('icegatheringstatechange', function() {
-        iceGatheringLog.textContent += ' -> ' + pc.iceGatheringState;
+        console.log("Gathering state: " + pc.iceGatheringState);
+        if (["gathering", "complete"].indexOf(pc.iceGatheringState) > -1)
+            document.getElementById('connectionProgress').value += 0.25;
     }, false);
-    iceGatheringLog.textContent = pc.iceGatheringState;
 
     pc.addEventListener('iceconnectionstatechange', function() {
-        iceConnectionLog.textContent += ' -> ' + pc.iceConnectionState;
+        console.log("Connection state: " + pc.iceConnectionState);
+        var progress = document.getElementById('connectionProgress')
+        if (["checking", "connected"].indexOf(pc.iceConnectionState) > -1) {
+            progress.value += 0.25
+            if (progress.value == 1)
+                setTimeout(function() {progress.style.display = 'none'}, 1000);
+        }
     }, false);
-    iceConnectionLog.textContent = pc.iceConnectionState;
 
     pc.addEventListener('signalingstatechange', function() {
-        signalingLog.textContent += ' -> ' + pc.signalingState;
+        console.log("Signaling state: " + pc.signalingState);
     }, false);
-    signalingLog.textContent = pc.signalingState;
 
     // connect audio / video
     pc.addEventListener('track', function(evt) {
@@ -82,16 +83,18 @@ function negotiate() {
 }
 
 function start() {
-    document.getElementById('start').style.display = 'none';
+    document.getElementById('start').href = 'javascript: stop()';
+    document.getElementById('start').innerHTML = 'disconnect';
     pc = createPeerConnection()
     dc = pc.createDataChannel('chat');
     negotiate();
-    document.getElementById('stop').style.display = 'inline-block';
 }
 
 function stop() {
-    document.getElementById('stop').style.display = 'none';
-
+    document.getElementById('start').href = 'javascript: start()';
+    document.getElementById('start').innerHTML = 'connect';
+    document.getElementById('connectionProgress').style.display = 'block';
+    document.getElementById('connectionProgress').value = 0;
     // close transceivers
     if (pc.getTransceivers) {
         pc.getTransceivers().forEach(function(transceiver) {

@@ -96,7 +96,7 @@ class WebRTCClient:
 
     @staticmethod
     async def __get_tracks():
-        video_options = {"video_size": "640x480", "framerate": "30", "vcodec": "hevc"}
+        video_options = {"video_size": "640x480", "framerate": "30"}
 
         if platform.system() == "Windows":
             video_track = MediaPlayer(
