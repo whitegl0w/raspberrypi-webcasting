@@ -50,10 +50,10 @@ class WebServer:
             return web.Response(status=404)
 
     def __init__(self, get_video_fun, ssl_context=None):
-        self.ssl_context = ssl_context
-        self.pcs = set()
-        self.get_video_fun = get_video_fun
-        self.server = None
+        self._ssl_context = ssl_context
+        self._pcs = set()
+        self._get_video_fun = get_video_fun
+        self._server = None
 
     # обработка запроса offer и отправка answer
     async def _offer(self, request):
@@ -61,10 +61,10 @@ class WebServer:
         offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
         pc = RTCPeerConnection()
-        self.pcs.add(pc)
+        self._pcs.add(pc)
 
         logger.info(f"Created for {request.remote}")
-        track = await self.get_video_fun()
+        track = await self._get_video_fun()
 
         @pc.on("connectionstatechange")
         async def on_connectionstatechange():
@@ -73,7 +73,7 @@ class WebServer:
             if pc.connectionState == "failed":
                 await pc.close()
                 track.stop()
-                self.pcs.discard(pc)
+                self._pcs.discard(pc)
 
         await pc.setRemoteDescription(offer)
         if track:
@@ -91,9 +91,9 @@ class WebServer:
 
     async def _on_shutdown(self, _):
         # закрыть все подключения
-        task = [pc.close() for pc in self.pcs]
+        task = [pc.close() for pc in self._pcs]
         await asyncio.gather(*task)
-        self.pcs.clear()
+        self._pcs.clear()
 
     async def start_webserver(self):
         app = web.Application()
@@ -106,8 +106,9 @@ class WebServer:
 
         runner = web.AppRunner(app)
         await runner.setup()
-        self.server = web.TCPSite(runner, host="0.0.0.0", port=8080, ssl_context=self.ssl_context)
-        await self.server.start()
+        self._server = web.TCPSite(runner, host="0.0.0.0", port=8080, ssl_context=self._ssl_context)
+        await self._server.start()
 
     async def stop_webserver(self):
-        await self.server.stop()
+        if self._server:
+            await self._server.stop()

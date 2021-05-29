@@ -51,10 +51,11 @@ class WebSocketClient:
 
 # Класс для создания webRTC подключения
 class WebRTCClient:
-    def __init__(self):
+    def __init__(self, resolution="640x480"):
         self.pc = None
         self.signaling = None
         self.__video = None
+        self.resolution = resolution
 
     async def connect(self, host, port):
         config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
@@ -96,9 +97,8 @@ class WebRTCClient:
                 await self.pc.close()
             logger.info(f"Connection state: {self.pc.connectionState}")
 
-    @staticmethod
-    async def __get_tracks():
-        video_options = {"video_size": "640x480", "framerate": "30"}
+    async def __get_tracks(self):
+        video_options = {"video_size": self.resolution, "framerate": "30"}
 
         if platform.system() == "Windows":
             video_track = MediaPlayer(
@@ -129,16 +129,21 @@ def create_client_config():
         def print_g(text, **args):
             print(f"\x1b[32m{text}\x1b[0m", **args)
 
-        def print_b(text, **args):
-            print(f"\x1b[34m{text}\x1b[0m", **args)
+        def input_b(text):
+            return input(f"\x1b[34m{text}\x1b[0m")
 
         config = configparser.ConfigParser()
         print_g("Client configuration tool")
-        print_b("Enter default websockets server: ", end="")
-        server = input()
-        print_b("Enter default websockets port: ", end="")
-        port = input()
-        config["CONNECTION"] = {"Server": server, "Port": port}
+        server = input_b("Enter default websockets server: ")
+        port = input_b("Enter default websockets port: ")
+        resolution = input_b("Choose cam video resolution (default: 640x480): ")
+        if not resolution:
+            resolution = "640x480"
+        web = input_b("Enable web server? (Y/N): ").upper() == "Y"
+        log = input_b("Enable debug log level? (Y/N): ").upper() == "Y"
+        config["CONNECTION"] = {"socket_server": server, "socket_port": port, "enable_webserver": str(web)}
+        config["CAM"] = {"resolution": resolution}
+        config["LOG"] = {"enable_debug": str(log)}
         with open('client.ini', 'w', encoding="utf-8") as configfile:
             config.write(configfile)
         print_g("Config client.ini created\n")
@@ -153,6 +158,8 @@ def main():
     parser.add_argument("-p", "--port", type=int, help='Server port')
     parser.add_argument("-v", "--verbose", action="count", help='Enable debug log')
     parser.add_argument("-c", "--configuration", action="count", help="Create config file")
+    parser.add_argument("-w", "--enableeweb", action="count", help="Enable web server")
+    parser.add_argument("-r", "--resolution", help="Set cam resolution")
     parser.add_argument("--cert-file", help="SSL certificate file (for HTTPS)")
     parser.add_argument("--key-file", help="SSL key file (for HTTPS)")
     args = parser.parse_args()
@@ -165,19 +172,23 @@ def main():
     config.read('client.ini')
     # Настройка параметров
     if not args.server:
-        if not config.has_option("CONNECTION", "Server"):
+        if not config.has_option("CONNECTION", "socket_server"):
             logger.error("Server not specified: use -s parameters or create a configuration "
                          "file with the command: client --configuration")
             sys.exit(1)
-        args.server = config.get("CONNECTION", "Server")
+        args.server = config.get("CONNECTION", "socket_server")
     if not args.port:
-        if not config.has_option("CONNECTION", "Port"):
+        if not config.has_option("CONNECTION", "socket_port"):
             logger.error("Port not specified: use -p parameters or create a configuration "
                          "file with the command: client --configuration")
             sys.exit(1)
-        args.port = config.get("CONNECTION", "Port")
-    if args.verbose or config.has_option("LOG", "Debug"):
+        args.port = config.get("CONNECTION", "socket_port")
+    if args.verbose or config.get("LOG", "enable_debug", fallback="false").lower() == "true":
         logger.setLevel(logging.DEBUG)
+    if not args.resolution:
+        args.resolution = config.get("CAM", "resolution", fallback="640x480")
+    if not args.enableeweb:
+        args.enableeweb = config.get("CONNECTION", "enable_webserver", fallback="false").lower() == "true"
     logger.debug(f"Parameters: port={args.port}, server={args.server}")
 
     # Получение сертификата
@@ -188,12 +199,13 @@ def main():
         ssl_context = None
 
     # Создание веб-сервера
-    conn = WebRTCClient()
+    conn = WebRTCClient(args.resolution)
     web_server = WebServer(conn.video_track, ssl_context)
 
     try:
         # запуск всех задач
-        asyncio.get_event_loop().create_task(web_server.start_webserver())
+        if args.enableeweb:
+            asyncio.get_event_loop().create_task(web_server.start_webserver())
         asyncio.get_event_loop().create_task(conn.connect(args.server, args.port))
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:

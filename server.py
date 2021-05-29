@@ -136,17 +136,18 @@ def create_server_config():
         def print_g(text, **args):
             print(f"\x1b[32m{text}\x1b[0m", **args)
 
-        def print_b(text, **args):
-            print(f"\x1b[34m{text}\x1b[0m", **args)
+        def input_b(text):
+            return input(f"\x1b[34m{text}\x1b[0m")
 
         config = configparser.ConfigParser()
         print_g("Server configuration tool")
-        print_b("Enter default websockets port: ", end="")
-        port = input()
-        print_b("Enter the duration of one fragment of the video file (hh:mm:ss): ", end="")
-        segment = input()
-        config["CONNECTION"] = {"Port": port}
-        config["RECORDER"] = {"Segment": segment}
+        port = input_b("Enter default websockets port: ")
+        web = input_b("Enable web server? (Y/N): ").upper() == "Y"
+        segment = input_b("Enter the duration of one fragment of the video file (hh:mm:ss): ")
+        log = input_b("Enable debug log level? (Y/N): ").upper() == "Y"
+        config["CONNECTION"] = {"socket_port": port, "enable_webserver": str(web)}
+        config["RECORDER"] = {"segment": segment}
+        config["LOG"] = {"enable_debug": str(log)}
         with open('server.ini', 'w', encoding="utf-8") as configfile:
             config.write(configfile)
         print_g("Config server.ini created\n")
@@ -161,6 +162,7 @@ def main():
     parser.add_argument("-v", "--verbose", action="count", help='Enable debug log')
     parser.add_argument("-s", "--segment", help="Set the duration of one fragment of the video file")
     parser.add_argument("-c", "--configuration", action="count", help="Create config file")
+    parser.add_argument("-w", "--enableeweb", action="count", help="Enable web server")
     parser.add_argument("--cert-file", help="SSL certificate file (for HTTPS)")
     parser.add_argument("--key-file", help="SSL key file (for HTTPS)")
     args = parser.parse_args()
@@ -176,8 +178,10 @@ def main():
         args.port = config.get("CONNECTION", "Port", fallback="443")
     if not args.segment:
         args.segment = config.get("RECORDER", "Segment", fallback="00:30:00")
-    if args.verbose or config.has_option("LOG", "Debug"):
+    if args.verbose or config.get("LOG", "enable_debug", fallback="false").lower() == "true":
         logger.setLevel(logging.DEBUG)
+    if not args.enableeweb:
+        args.enableeweb = config.get("CONNECTION", "enable_webserver", fallback="false").lower() == "true"
     logger.debug(f"Parameters: port={args.port}, segment={args.segment}")
     # Получение сертификата
     if args.cert_file:
@@ -192,7 +196,8 @@ def main():
 
     try:
         # запуск всех задач
-        asyncio.get_event_loop().create_task(web_server.start_webserver())
+        if args.enableeweb:
+            asyncio.get_event_loop().create_task(web_server.start_webserver())
         asyncio.get_event_loop().create_task(conn.accept(args.port, args.segment))
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
