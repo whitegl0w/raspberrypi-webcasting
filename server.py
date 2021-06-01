@@ -1,16 +1,14 @@
 import asyncio
 import configparser
-import json
 import logging
 import ssl
 import sys
-import websockets
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer, MediaStreamTrack
 from aiortc.contrib.media import MediaRecorder, MediaRelay
 from argparse import ArgumentParser
 from logging_setting import ColorHandler
-from websockets import WebSocketServerProtocol
+from signaling import WebSocketServer, WebSocketClient
 from webserver import WebServer
 
 
@@ -31,35 +29,6 @@ class FixedPtsTrack(MediaStreamTrack):
         return frame
 
 
-# Класс для создания сигнального канала
-class WebSocketServer:
-    def __init__(self, port):
-        self.__websock = None
-        self.__message_event = None
-        start_server = websockets.serve(self.__handler, '0.0.0.0', port)
-        asyncio.ensure_future(start_server)
-
-    async def __handler(self, websock: WebSocketServerProtocol, _):
-        logger.info(f"Connected {websock.remote_address} websockets")
-        self.__websock = websock
-        async for message in websock:
-            data = json.loads(message)
-            if self.__message_event:
-                await self.__message_event(data)
-
-    def on_message(self, fn):
-        self.__message_event = fn
-
-    async def send_data(self, data: dict):
-        if self.__websock:
-            message = json.dumps(data)
-            await self.__websock.send(message)
-
-    async def close(self):
-        if self.__websock:
-            await self.__websock.close()
-
-
 # Класс для создания webRTC подключения
 class WebRTCServer:
     def __init__(self):
@@ -68,10 +37,14 @@ class WebRTCServer:
         self.recorder = None
         self.__video = None
 
-    async def accept(self, port, segment_time):
+    async def accept(self, port, segment_time, server=None):
         config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
         self.pc = RTCPeerConnection(config)
-        self.signaling = WebSocketServer(port)
+        if server:
+            self.signaling = WebSocketClient(server, port)
+        else:
+            self.signaling = WebSocketServer(port)
+
         recorder_options = {
             "segment_time": segment_time,
             "reset_timestamps": "1",
@@ -160,9 +133,10 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("-p", "--port", type=int, help='Server port (default: 443)')
     parser.add_argument("-v", "--verbose", action="count", help='Enable debug log')
-    parser.add_argument("-s", "--segment", help="Set the duration of one fragment of the video file")
+    parser.add_argument("-st", "--segment", help="Set the duration of one fragment of the video file")
     parser.add_argument("-c", "--configuration", action="count", help="Create config file")
     parser.add_argument("-w", "--enableeweb", action="count", help="Enable web server")
+    parser.add_argument("-s", "--server", help="Signaling server IP address")
     parser.add_argument("--cert-file", help="SSL certificate file (for HTTPS)")
     parser.add_argument("--key-file", help="SSL key file (for HTTPS)")
     args = parser.parse_args()
@@ -182,6 +156,9 @@ def main():
         logger.setLevel(logging.DEBUG)
     if not args.enableeweb:
         args.enableeweb = config.get("CONNECTION", "enable_webserver", fallback="false").lower() == "true"
+    if not args.server:
+        args.server = config.get("CONNECTION", "signaling_server", fallback=None)
+
     logger.debug(f"Parameters: port={args.port}, segment={args.segment}")
     # Получение сертификата
     if args.cert_file:
@@ -198,7 +175,7 @@ def main():
         # запуск всех задач
         if args.enableeweb:
             asyncio.get_event_loop().create_task(web_server.start_webserver())
-        asyncio.get_event_loop().create_task(conn.accept(args.port, args.segment))
+        asyncio.get_event_loop().create_task(conn.accept(args.port, args.segment, args.server))
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         pass
@@ -210,7 +187,7 @@ def main():
 
 if __name__ == '__main__':
     # Настройка логов
-    logger = logging.getLogger("app")
+    logger = logging.getLogger("webrtc")
     logger.setLevel(logging.INFO)
     logger.addHandler(ColorHandler())
     main()

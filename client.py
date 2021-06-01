@@ -1,52 +1,16 @@
 import asyncio
 import configparser
-import json
 import logging
 import platform
 import ssl
 import sys
-import websockets
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from aiortc.contrib.media import MediaPlayer, MediaRelay
 from argparse import ArgumentParser
 from logging_setting import ColorHandler
+from signaling import WebSocketClient
 from webserver import WebServer
-
-
-# Класс для создания сигнального канала
-class WebSocketClient:
-    def __init__(self, server, port):
-        self.__websock = None
-        self.__on_message = None
-        self.__on_connected = None
-        uri = f"ws://{server}:{port}"
-        asyncio.get_event_loop().create_task(self.__connect(uri))
-
-    async def __connect(self, uri):
-        async with websockets.connect(uri) as self.__websock:
-            logger.info(f"Connected {self.__websock.remote_address} websockets")
-            if self.__on_connected:
-                await self.__on_connected()
-            async for message in self.__websock:
-                data = json.loads(message)
-                if self.__on_message:
-                    await self.__on_message(data)
-
-    def on_message(self, fn):
-        self.__on_message = fn
-
-    def on_connected(self, fn):
-        self.__on_connected = fn
-
-    async def send_data(self, data: dict):
-        if self.__websock:
-            message = json.dumps(data)
-            await self.__websock.send(message)
-
-    async def close(self):
-        if self.__websock:
-            await self.__websock.close()
 
 
 # Класс для создания webRTC подключения
@@ -81,7 +45,7 @@ class WebRTCClient:
                 self.pc.once("icegatheringstatechange", send_offer)
 
         @self.signaling.on_connected
-        async def on_connected():
+        async def on_connected(_):
             await send_offer()
 
         @self.signaling.on_message
@@ -217,7 +181,7 @@ def main():
 
 
 if __name__ == '__main__':
-    logger = logging.getLogger("app")
+    logger = logging.getLogger("webrtc")
     logger.setLevel(logging.INFO)
     logger.addHandler(ColorHandler())
     main()
