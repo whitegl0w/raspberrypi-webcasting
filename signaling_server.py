@@ -23,19 +23,20 @@ class WebSocketSignalingServer:
         logger.info(f"Connected {websock.remote_address} websockets")
         self.clients.add(websock)
         if self.prev_messages:
-            await asyncio.wait([websock.send(message) for message in self.prev_messages])
+            await asyncio.wait([asyncio.create_task(websock.send(message)) for message in self.prev_messages])
         try:
             async for message in websock:
                 self.prev_messages.append(message)
                 receivers = (self.clients - {websock})
                 if receivers:
-                    await asyncio.wait([client.send(message) for client in receivers])
+                    await asyncio.wait([asyncio.create_task(client.send(message)) for client in receivers])
         finally:
             self.clients.discard(websock)
+            self.prev_messages.clear()
 
     async def close(self):
         if self.clients:
-            await asyncio.wait([client.close() for client in self.clients])
+            await asyncio.wait([asyncio.create_task(client.close()) for client in self.clients])
 
 
 def main():

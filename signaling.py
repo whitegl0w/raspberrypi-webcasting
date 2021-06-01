@@ -58,11 +58,11 @@ class WebSocketServer(WebSocketBasic):
 class WebSocketClient(WebSocketBasic):
     def __init__(self, server, port):
         super().__init__()
-        uri = f"ws://{server}:{port}"
+        uri = f"wss://{server}:{port}"
         asyncio.get_event_loop().create_task(self.__connect(uri))
 
     async def __connect(self, uri):
-        async with websockets.connect(uri) as self._websock:
+        async with websockets.connect(uri, ssl=True) as self._websock:
             logger.info(f"Connected {self._websock.remote_address} websockets")
             if self._on_connected:
                 await self._on_connected(self._websock)
