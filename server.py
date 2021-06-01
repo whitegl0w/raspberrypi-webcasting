@@ -54,6 +54,16 @@ class WebRTCServer:
                                       format="segment",
                                       options=recorder_options)
 
+        async def send_answer():
+            logger.debug(f"Ice Gathering State: {self.pc.iceGatheringState}")
+            if self.pc.iceGatheringState == 'complete':
+                logger.debug("Answer sent")
+                await self.signaling.send_data(
+                    {"sdp": self.pc.localDescription.sdp, "type": self.pc.localDescription.type}
+                )
+            else:
+                self.pc.once("icegatheringstatechange", send_answer)
+
         @self.signaling.on_message
         async def on_message(message):
             logger.debug(f"{message.get('type')} received")
@@ -62,9 +72,7 @@ class WebRTCServer:
                 await self.pc.setRemoteDescription(offer)
                 answer = await self.pc.createAnswer()
                 await self.pc.setLocalDescription(answer)
-                answer = {"sdp": self.pc.localDescription.sdp, "type": self.pc.localDescription.type}
-                logger.debug("Answer sent")
-                await self.signaling.send_data(answer)
+                await send_answer()
 
         @self.pc.on("connectionstatechange")
         async def on_connectionstatechange():
