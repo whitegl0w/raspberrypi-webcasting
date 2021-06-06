@@ -1,0 +1,66 @@
+<!DOCTYPE HTML>
+<html lang="ru">
+    <head>
+        <meta http-equiv="Content-type" content="text/html" charset=utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Вход</title>
+        <style>
+            body, html {
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            #flexContainer {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                background-color: #222226;
+                color: #efefef;
+                height: 100%;
+                width: 100%;
+            }
+            #flexElem {
+                 background-color: #333336;
+                 display: block;
+                 padding: 30px;
+                 border-radius: 10px;
+            }
+            form {
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                align-items: stretch;
+            }
+            form > div {
+                display: flex;
+                justify-content: space-between;
+                align-items: stretch;
+            }
+            label, input {
+                margin: 15px;
+            }
+            input[type="submit"] {
+                background-color: #29c5e6;
+                color: white;
+                height: 30px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="flexContainer">
+            <div id="flexElem">
+                <form action="/login" method="post">
+                    <div>
+                        <label for="username">Login</label>
+                        <input id="username" type="text" name="username">
+                    </div>
+                    <div>
+                        <label for="pass">Password</label>
+                        <input id="pass" type="password" name="password">
+                    </div>
+                    <input type="submit" value="Enter">
+                </form>
+            </div>
+        </div>
+    </body>
+</html>

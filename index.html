@@ -1,7 +1,7 @@
 <!DOCTYPE HTML>
 <html>
     <head>
-        <meta http-equiv="Content-type" content="text/html; charset=utf-8">
+        <meta http-equiv="Content-type" content="text/html" charset=utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Raspberry Pi Webcasting system</title>
         <style>
@@ -12,6 +12,9 @@
                 padding: 1px;
                 margin: 0 2% 0 2%;
                 color: #29c5e6;
+                display: flex;
+                justify-content: space-around;
+                align-items: center;
             }
             #header > img {
                 width: 30%;
@@ -89,6 +92,27 @@
                 color: #222226;
                 text-decoration: underline;
             }
+            #session {
+                float: right;
+                margin: 10px;
+                display: flex;
+                align-items: center;
+            }
+            #session > a {
+                margin: 10px;
+                background-color: #29c5e6;
+                color: white;
+                text-decoration: none;
+                padding: 10px;
+                border-radius: 10px;
+            }
+            #session > p {
+                font-size: 1.2em;
+            }
+            #session > a:hover {
+                background-color: white;
+                color: #29c5e6;
+            }
             @media screen and (max-width: 900px) {
                 #mediaBlock {
                     flex-direction: column;
@@ -99,7 +123,10 @@
                     flex: 0 0 auto;
                 }
                 #header > img {
-                    width: 90%;
+                    width: 60%;
+                }
+                #session > p {
+                    display: none;
                 }
             }
         </style>
@@ -108,6 +135,10 @@
         <div id="wrap">
             <div id="header">
                 <img src="/logo.svg" alt="Raspberry Pi Webcasting System" />
+                <div id="session">
+                    <p>{{ user }}</p>
+                    <a href="logout">Logout</a>
+                </div>
             </div>
 
             <div id="mediaBlock">
