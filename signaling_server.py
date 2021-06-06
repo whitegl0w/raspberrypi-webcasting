@@ -29,23 +29,27 @@ class WebSocketSignalingServer:
     async def __handler(self, websock: WebSocketServerProtocol, _):
         logger.info(f"Connected {websock.remote_address} websockets")
         # авторизация
+        # генерация случайной последовательности длиной 128 байт
         key = os.urandom(128)
+        # чтение публичного ключа
         with open("rsa_key.pub", "rb") as key_file:
             public_key = serialization.load_pem_public_key(key_file.read())
-
+        # шифрование последовательности
         encrypted_key = public_key.encrypt(key, padding.OAEP(
                 mgf=padding.MGF1(algorithm=hashes.SHA256()),
                 algorithm=hashes.SHA256(),
                 label=None
             )
         )
+        # отправка зашифрованной последовательности
         await websock.send(encrypted_key)
+        # получение последовательности
         try:
             decrypted_key = await websock.recv()
         except ConnectionClosedOK:
             logger.info(f"Disconnected: {websock.remote_address}")
             return
-
+        # проверка на совпадение
         if key != decrypted_key:
             logger.warning(f"Authentication failed: {websock.remote_address}")
             await websock.close()

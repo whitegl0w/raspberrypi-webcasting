@@ -34,6 +34,11 @@ class WebServer:
         return {"videos": files}
 
     @staticmethod
+    async def _logo(_):
+        logo_path = os.path.join(os.path.dirname(__file__), "logo.svg")
+        return web.FileResponse(logo_path)
+
+    @staticmethod
     async def _javascript(_):
         content = open(os.path.join(os.path.dirname(__file__), "client.js"), "r").read()
         return web.Response(content_type="application/javascript", text=content)
@@ -99,6 +104,7 @@ class WebServer:
         app = web.Application()
         app.on_shutdown.append(self._on_shutdown)
         app.router.add_get("/", WebServer._index)
+        app.router.add_get("/logo.svg", WebServer._logo)
         app.router.add_get("/client.js", WebServer._javascript)
         app.router.add_post("/offer", self._offer)
         app.router.add_get("/download/{name}", WebServer._download_file)
