@@ -169,22 +169,18 @@ def main():
     else:
         ssl_context = None
 
-    # Создание веб-сервера
+    # Создание соединения
     conn = WebRTCClient(args.resolution)
-    web_server = WebServer(conn.video_track, ssl_context)
 
     try:
         # запуск всех задач
-        if args.enableeweb:
-            asyncio.get_event_loop().create_task(web_server.start_webserver())
         asyncio.get_event_loop().create_task(conn.connect(args.server, args.port, turn_server))
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        # закрытие всех соединений
-        task = asyncio.gather(conn.close_connection(), web_server.stop_webserver())
-        asyncio.get_event_loop().run_until_complete(task)
+        # закрытие соединений
+        asyncio.get_event_loop().run_until_complete(conn.close_connection())
 
 
 if __name__ == '__main__':
