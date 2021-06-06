@@ -21,8 +21,11 @@ class WebRTCClient:
         self.__video = None
         self.resolution = resolution
 
-    async def connect(self, host, port):
-        config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
+    async def connect(self, host, port, turn=None):
+        ice_servers = [RTCIceServer('stun:stun.l.google.com:19302')]
+        if turn:
+            ice_servers.append(turn)
+        config = RTCConfiguration(ice_servers)
         self.pc = RTCPeerConnection(config)
 
         if not self.__video:
@@ -103,9 +106,8 @@ def create_client_config():
         resolution = input_b("Choose cam video resolution (default: 640x480): ")
         if not resolution:
             resolution = "640x480"
-        web = input_b("Enable web server? (Y/N): ").upper() == "Y"
         log = input_b("Enable debug log level? (Y/N): ").upper() == "Y"
-        config["CONNECTION"] = {"socket_server": server, "socket_port": port, "enable_webserver": str(web)}
+        config["CONNECTION"] = {"socket_server": server, "socket_port": port}
         config["CAM"] = {"resolution": resolution}
         config["LOG"] = {"enable_debug": str(log)}
         with open('client.ini', 'w', encoding="utf-8") as configfile:
@@ -122,7 +124,6 @@ def main():
     parser.add_argument("-p", "--port", type=int, help='Server port')
     parser.add_argument("-v", "--verbose", action="count", help='Enable debug log')
     parser.add_argument("-c", "--configuration", action="count", help="Create config file")
-    parser.add_argument("-w", "--enableeweb", action="count", help="Enable web server")
     parser.add_argument("-r", "--resolution", help="Set cam resolution")
     parser.add_argument("--cert-file", help="SSL certificate file (for HTTPS)")
     parser.add_argument("--key-file", help="SSL key file (for HTTPS)")
@@ -151,8 +152,14 @@ def main():
         logger.setLevel(logging.DEBUG)
     if not args.resolution:
         args.resolution = config.get("CAM", "resolution", fallback="640x480")
-    if not args.enableeweb:
-        args.enableeweb = config.get("CONNECTION", "enable_webserver", fallback="false").lower() == "true"
+
+    turn_server = None
+    if config.has_option("TURN", "url"):
+        url = config.get("TURN", "url")
+        username = config.get("TURN", "username", fallback=None)
+        password = config.get("TURN", "password", fallback=None)
+        turn_server = RTCIceServer(url, username=username, credential=password)
+
     logger.debug(f"Parameters: port={args.port}, server={args.server}")
 
     # Получение сертификата
@@ -170,7 +177,7 @@ def main():
         # запуск всех задач
         if args.enableeweb:
             asyncio.get_event_loop().create_task(web_server.start_webserver())
-        asyncio.get_event_loop().create_task(conn.connect(args.server, args.port))
+        asyncio.get_event_loop().create_task(conn.connect(args.server, args.port, turn_server))
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         pass

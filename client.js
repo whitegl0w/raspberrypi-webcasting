@@ -1,4 +1,3 @@
-// peer connection
 var pc = null;
 
 function createPeerConnection() {
@@ -10,7 +9,6 @@ function createPeerConnection() {
 
     pc = new RTCPeerConnection(config);
 
-    // register some listeners to help debugging
     pc.addEventListener('icegatheringstatechange', function() {
         console.log("Gathering state: " + pc.iceGatheringState);
         if (["gathering", "complete"].indexOf(pc.iceGatheringState) > -1)
@@ -31,7 +29,6 @@ function createPeerConnection() {
         console.log("Signaling state: " + pc.signalingState);
     }, false);
 
-    // connect audio / video
     pc.addEventListener('track', function(evt) {
         if (evt.track.kind == 'video')
             document.getElementById('video').srcObject = evt.streams[0];
@@ -45,7 +42,6 @@ function negotiate() {
     }, function(error) {
         alert(error);
     }).then(function() {
-        // wait for ICE gathering to complete
         return new Promise(function(resolve) {
             if (pc.iceGatheringState === 'complete') {
                 resolve();
@@ -95,7 +91,7 @@ function stop() {
     document.getElementById('start').innerHTML = 'connect';
     document.getElementById('connectionProgress').style.display = 'block';
     document.getElementById('connectionProgress').value = 0;
-    // close transceivers
+
     if (pc.getTransceivers) {
         pc.getTransceivers().forEach(function(transceiver) {
             if (transceiver.stop) {
@@ -104,7 +100,6 @@ function stop() {
         });
     }
 
-    // close peer connection
     setTimeout(function() {
         pc.close();
     }, 1000);
@@ -168,5 +163,5 @@ function sdpFilterCodec(kind, codec, realSdp) {
 }
 
 function escapeRegExp(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

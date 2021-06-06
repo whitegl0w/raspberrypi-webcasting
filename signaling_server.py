@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import websockets
 
 from argparse import ArgumentParser
@@ -14,7 +15,9 @@ logger.addHandler(ColorHandler())
 
 class WebSocketSignalingServer:
     def __init__(self, port):
+        # список подключенных клиентов
         self.clients = set()
+        # список сообщений
         self.prev_messages = []
         start_server = websockets.serve(self.__handler, '0.0.0.0', port)
         asyncio.ensure_future(start_server)
@@ -22,15 +25,19 @@ class WebSocketSignalingServer:
     async def __handler(self, websock: WebSocketServerProtocol, _):
         logger.info(f"Connected {websock.remote_address} websockets")
         self.clients.add(websock)
+        # если до подключения клиента на сервер были переданы какие-то сообщения, то они посылаются ему
         if self.prev_messages:
             await asyncio.wait([asyncio.create_task(websock.send(message)) for message in self.prev_messages])
         try:
+            # чтение сообщений от клиента
             async for message in websock:
                 self.prev_messages.append(message)
+                # отправка полученного сообщения всем кроме отправителя
                 receivers = (self.clients - {websock})
                 if receivers:
                     await asyncio.wait([asyncio.create_task(client.send(message)) for client in receivers])
         finally:
+            # удаление клиента из списка при его отключении и очистка сохраненных сообщений
             self.clients.discard(websock)
             self.prev_messages.clear()
 
@@ -41,11 +48,11 @@ class WebSocketSignalingServer:
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument("-p", "--port", type=int, help='Server port (default: 443)')
+    parser.add_argument("-p", "--port", type=int, help='Server port (default: 8080)')
     args = parser.parse_args()
 
     if not args.port:
-        args.port = 443
+        args.port = os.getenv("PORT", default=8080)
 
     server = WebSocketSignalingServer(args.port)
 

@@ -37,8 +37,11 @@ class WebRTCServer:
         self.recorder = None
         self.__video = None
 
-    async def accept(self, port, segment_time, server=None):
-        config = RTCConfiguration([RTCIceServer('stun:stun.l.google.com:19302')])
+    async def accept(self, port, segment_time, server=None, turn=None):
+        ice_servers = [RTCIceServer('stun:stun.l.google.com:19302')]
+        if turn:
+            ice_servers.append(turn)
+        config = RTCConfiguration(ice_servers)
         self.pc = RTCPeerConnection(config)
         if server:
             self.signaling = WebSocketClient(server, port)
@@ -56,12 +59,14 @@ class WebRTCServer:
 
         async def send_answer():
             logger.debug(f"Ice Gathering State: {self.pc.iceGatheringState}")
+            # отправка происходит если были собраны все IceCandidate
             if self.pc.iceGatheringState == 'complete':
                 logger.debug("Answer sent")
                 await self.signaling.send_data(
                     {"sdp": self.pc.localDescription.sdp, "type": self.pc.localDescription.type}
                 )
             else:
+                # если IceCandidate не собраны, то ожидается их сбор
                 self.pc.once("icegatheringstatechange", send_answer)
 
         @self.signaling.on_message
@@ -167,6 +172,13 @@ def main():
     if not args.server:
         args.server = config.get("CONNECTION", "signaling_server", fallback=None)
 
+    turn_server = None
+    if config.has_option("TURN", "url"):
+        url = config.get("TURN", "url")
+        username = config.get("TURN", "username", fallback=None)
+        password = config.get("TURN", "password", fallback=None)
+        turn_server = RTCIceServer(url, username=username, credential=password)
+
     logger.debug(f"Parameters: port={args.port}, segment={args.segment}")
     # Получение сертификата
     if args.cert_file:
@@ -183,7 +195,7 @@ def main():
         # запуск всех задач
         if args.enableeweb:
             asyncio.get_event_loop().create_task(web_server.start_webserver())
-        asyncio.get_event_loop().create_task(conn.accept(args.port, args.segment, args.server))
+        asyncio.get_event_loop().create_task(conn.accept(args.port, args.segment, args.server, turn_server))
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         pass
