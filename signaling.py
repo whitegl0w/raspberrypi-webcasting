@@ -1,8 +1,12 @@
 import asyncio
 import json
 import logging
+import sys
+
 import websockets
 
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import padding
 from logging_setting import ColorHandler
 from websockets import WebSocketServerProtocol
 
@@ -64,6 +68,24 @@ class WebSocketClient(WebSocketBasic):
     async def __connect(self, uri):
         async with websockets.connect(uri, ssl=True) as self._websock:
             logger.info(f"Connected {self._websock.remote_address} websockets")
+            # авторизация
+            with open("rsa_key", "rb") as key_file:
+                private_key = serialization.load_pem_private_key(key_file.read(), password=None)
+            encrypted_key = await self._websock.recv()
+            try:
+                decrypted_key = private_key.decrypt(encrypted_key, padding.OAEP(
+                        mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                        algorithm=hashes.SHA256(),
+                        label=None
+                    )
+                )
+            except ValueError:
+                logger.error(f"Authentication failed")
+                await self._websock.close()
+                return
+            await self._websock.send(decrypted_key)
+            # продолжение работы
+            logger.info(f"Authentication succeed")
             if self._on_connected:
                 await self._on_connected(self._websock)
             async for message in self._websock:

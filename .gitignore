@@ -4,5 +4,7 @@ video/
 test.py
 server.crt
 server.key
+rsa_key
+rsa_key.pub
 *.mp4
 *.ini

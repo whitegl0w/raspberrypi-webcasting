@@ -4,6 +4,10 @@ import os
 import websockets
 
 from argparse import ArgumentParser
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from websockets.exceptions import ConnectionClosedOK
+
 from logging_setting import ColorHandler
 from websockets import WebSocketServerProtocol
 
@@ -24,6 +28,30 @@ class WebSocketSignalingServer:
 
     async def __handler(self, websock: WebSocketServerProtocol, _):
         logger.info(f"Connected {websock.remote_address} websockets")
+        # авторизация
+        key = os.urandom(128)
+        with open("rsa_key.pub", "rb") as key_file:
+            public_key = serialization.load_pem_public_key(key_file.read())
+
+        encrypted_key = public_key.encrypt(key, padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        await websock.send(encrypted_key)
+        try:
+            decrypted_key = await websock.recv()
+        except ConnectionClosedOK:
+            logger.info(f"Disconnected: {websock.remote_address}")
+            return
+
+        if key != decrypted_key:
+            logger.warning(f"Authentication failed: {websock.remote_address}")
+            await websock.close()
+            return
+        # авторизация успешна, прололжение
+        logger.info(f"Authentication succeed: {websock.remote_address}")
         self.clients.add(websock)
         # если до подключения клиента на сервер были переданы какие-то сообщения, то они посылаются ему
         if self.prev_messages:
