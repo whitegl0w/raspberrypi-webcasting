@@ -7,9 +7,9 @@ import sys
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer, MediaStreamTrack
 from aiortc.contrib.media import MediaRecorder, MediaRelay
 from argparse import ArgumentParser
-from logging_setting import ColorHandler
-from signaling import WebSocketServer, WebSocketClient
-from webserver import WebServer
+from general_classes.logging_setting import ColorHandler
+from general_classes.signaling import WebSocketServer, WebSocketClient
+from web_server.webserver import WebServer
 
 
 # исправление pts-presentation timestamp в видео на равномерный,

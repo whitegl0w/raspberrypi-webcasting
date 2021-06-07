@@ -11,7 +11,7 @@ pem = private_key.private_bytes(
     format=serialization.PrivateFormat.TraditionalOpenSSL,
     encryption_algorithm=serialization.NoEncryption()
 )
-with open("rsa_key", "wb") as key_file:
+with open("../rsa_key", "wb") as key_file:
     key_file.write(pem)
 
 public_key = private_key.public_key()
@@ -19,5 +19,5 @@ pem = public_key.public_bytes(
     encoding=serialization.Encoding.PEM,
     format=serialization.PublicFormat.SubjectPublicKeyInfo
 )
-with open("rsa_key.pub", "wb") as key_file:
+with open("../rsa_key.pub", "wb") as key_file:
     key_file.write(pem)

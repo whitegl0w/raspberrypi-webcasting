@@ -1,13 +1,11 @@
 import asyncio
 import json
 import logging
-import sys
-
 import websockets
 
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
-from logging_setting import ColorHandler
+from general_classes.logging_setting import ColorHandler
 from websockets import WebSocketServerProtocol
 
 

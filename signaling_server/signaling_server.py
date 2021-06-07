@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from websockets.exceptions import ConnectionClosedOK
 
-from logging_setting import ColorHandler
+from general_classes.logging_setting import ColorHandler
 from websockets import WebSocketServerProtocol
 
 # настройка логов
@@ -32,7 +32,7 @@ class WebSocketSignalingServer:
         # генерация случайной последовательности длиной 128 байт
         key = os.urandom(128)
         # чтение публичного ключа
-        with open("rsa_key.pub", "rb") as key_file:
+        with open("../rsa_key.pub", "rb") as key_file:
             public_key = serialization.load_pem_public_key(key_file.read())
         # шифрование последовательности
         encrypted_key = public_key.encrypt(key, padding.OAEP(

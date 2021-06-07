@@ -8,8 +8,8 @@ import sys
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from aiortc.contrib.media import MediaPlayer, MediaRelay
 from argparse import ArgumentParser
-from logging_setting import ColorHandler
-from signaling import WebSocketClient
+from general_classes.logging_setting import ColorHandler
+from general_classes.signaling import WebSocketClient
 
 
 # Класс для создания webRTC подключения

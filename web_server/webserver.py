@@ -14,10 +14,10 @@ from aiohttp_security import setup as setup_security, check_permission, check_au
 from aiohttp_security import SessionIdentityPolicy
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from cryptography import fernet
-from logging_setting import ColorHandler
 
-from authz import DictionaryAuthorizationPolicy, check_credentials
-from users import user_map
+from general_classes.logging_setting import ColorHandler
+from web_server.authz import DictionaryAuthorizationPolicy, check_credentials
+from web_server.users import user_map
 
 # настройка логов
 logger = logging.getLogger("webapp")
@@ -30,7 +30,7 @@ class WebServer:
     @staticmethod
     @aiohttp_jinja2.template("index.html")
     async def _index(request):
-        directory = os.path.join(os.path.dirname(__file__), "video")
+        directory = os.path.join(os.path.dirname(__file__), "../video")
 
         def get_size(file):
             size = os.path.getsize(os.path.join(directory, file))
@@ -65,7 +65,7 @@ class WebServer:
     async def _download_file(request):
         await check_permission(request, 'download')
         filename = request.match_info['name']
-        fullname = os.path.join(os.path.dirname(__file__), "video", filename)
+        fullname = os.path.join(os.path.dirname(__file__), "../video", filename)
         if os.path.exists(fullname):
             return web.FileResponse(fullname)
         else:
