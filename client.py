@@ -10,7 +10,6 @@ from aiortc.contrib.media import MediaPlayer, MediaRelay
 from argparse import ArgumentParser
 from logging_setting import ColorHandler
 from signaling import WebSocketClient
-from webserver import WebServer
 
 
 # Класс для создания webRTC подключения
