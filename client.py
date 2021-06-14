@@ -14,11 +14,12 @@ from general_classes.signaling import WebSocketClient
 
 # Класс для создания webRTC подключения
 class WebRTCClient:
-    def __init__(self, resolution="640x480"):
+    def __init__(self, resolution="640x480", bitrate=None):
         self.pc = None
         self.signaling = None
         self.__video = None
         self.resolution = resolution
+        self.bitrate = bitrate
 
     async def connect(self, host, port, turn=None):
         ice_servers = [RTCIceServer('stun:stun.l.google.com:19302')]
@@ -64,7 +65,10 @@ class WebRTCClient:
             logger.info(f"Connection state: {self.pc.connectionState}")
 
     async def __get_tracks(self):
-        video_options = {"video_size": self.resolution, "framerate": "30"}
+        if self.bitrate:
+            video_options = {"video_size": self.resolution, "framerate": "30", "b:v": self.bitrate}
+        else:
+            video_options = {"video_size": self.resolution, "framerate": "30"}
 
         if platform.system() == "Windows":
             video_track = MediaPlayer(
@@ -124,6 +128,7 @@ def main():
     parser.add_argument("-v", "--verbose", action="count", help='Enable debug log')
     parser.add_argument("-c", "--configuration", action="count", help="Create config file")
     parser.add_argument("-r", "--resolution", help="Set cam resolution")
+    parser.add_argument("-b", "--bitrate", help="Set cam bitrate")
     parser.add_argument("--cert-file", help="SSL certificate file (for HTTPS)")
     parser.add_argument("--key-file", help="SSL key file (for HTTPS)")
     args = parser.parse_args()
@@ -151,6 +156,8 @@ def main():
         logger.setLevel(logging.DEBUG)
     if not args.resolution:
         args.resolution = config.get("CAM", "resolution", fallback="640x480")
+    if not args.bitrate:
+        args.bitrate = config.get("CAM", "bitrate", fallback=None)
 
     turn_server = None
     if config.has_option("TURN", "url"):
@@ -169,7 +176,7 @@ def main():
         ssl_context = None
 
     # Создание соединения
-    conn = WebRTCClient(args.resolution)
+    conn = WebRTCClient(args.resolution, args.bitrate)
 
     try:
         # запуск всех задач
